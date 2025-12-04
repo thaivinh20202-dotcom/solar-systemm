@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Hệ Mặt Trời 3D</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; font-family:sans-serif; }
+    #container { width:100%; height:100vh; }
+    .info {
+      position: absolute; top:10px; left:10px;
+      background: rgba(0,0,0,0.5); color:#fff;
+      padding:6px 10px; border-radius:6px; font-size:13px;
+      z-index:10;
+    }
+    .label {
+      color:#fff; background:rgba(0,0,0,0.6); 
+      padding:2px 6px; border-radius:4px; font-size:12px;
+      white-space: nowrap; transform: translate(-50%, -50%);
+      pointer-events:none;
+    }
+  </style>
+</head>
+<body>
+<div id="container"></div>
+<div class="info">Hệ Mặt Trời — kéo chuột để xoay, cuộn để zoom. Bấm H để ẩn/quay quỹ đạo.</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/renderers/CSS2DRenderer.js';
+import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+const container = document.getElementById('container');
+const scene = new THREE.Scene();
+
+// Camera + Renderer
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 5000);
+camera.position.set(0, 220, 700);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+container.appendChild(renderer.domElement);
+
+// Label renderer
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(innerWidth, innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+// Controls
+const controls = new OrbitControls(camera, labelRenderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 80;
+controls.maxDistance = 2500;
+
+// Background
+const loader = new THREE.TextureLoader();
+loader.load(
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/skies/space3.png',
+  tex => scene.background = tex,
+  undefined,
+  err => scene.background = new THREE.Color(0x000011)
+);
+
+// Sun
+const sunGeo = new THREE.SphereGeometry(40, 64, 64);
+const sunMat = new THREE.MeshStandardMaterial({ emissive:0xffcc33, emissiveIntensity:1.2, roughness:0.5 });
+loader.load('https://cdn.jsdelivr.net/gh/thiagopnts/solar-system-textures/sun.jpg',
+  tex=>{ sunMat.map=tex; sunMat.emissiveMap=tex; sunMat.needsUpdate=true; }, undefined, ()=>{}
+);
+const sun = new THREE.Mesh(sunGeo, sunMat);
+scene.add(sun);
+
+// Bloom
+const composer = new EffectComposer(renderer);
+composer.setSize(innerWidth, innerHeight);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.2, 0.6, 0.1);
+composer.addPass(bloomPass);
+
+// Lights
+const sunLight = new THREE.PointLight(0xfff2cc, 2.6, 4000, 2);
+sunLight.position.copy(sun.position);
+scene.add(sunLight);
+scene.add(new THREE.AmbientLight(0x333344,0.6));
+
+// Planets
+const planetDefs = [
+  {name:'Mercury',size:4,dist:70,orbitSpeed:0.023,rotSpeed:0.002,color:0x888888,tex:null},
+  {name:'Venus',size:7,dist:100,orbitSpeed:0.017,rotSpeed:0.001,color:0xffd7a8,tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/venus.jpg'},
+  {name:'Earth',size:8.5,dist:140,orbitSpeed:0.013,rotSpeed:0.02,color:0x2a6ef0,tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/earth.jpg'},
+  {name:'Mars',size:6,dist:175,orbitSpeed:0.01,rotSpeed:0.018,color:0xff6b4a,tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/mars.jpg'},
+  {name:'Jupiter',size:20,dist:235,orbitSpeed:0.006,rotSpeed:0.04,color:0xd9b37a,tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/jupiter.jpg'},
+  {name:'Saturn',size:17,dist:305,orbitSpeed:0.004,rotSpeed:0.038,color:0xe8d9b0,
+    tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/saturn.jpg',
+    ring:{inner:20,outer:36,tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/saturn_ring.png'}
+  },
+  {name:'Uranus',size:11,dist:360,orbitSpeed:0.0026,rotSpeed:0.03,color:0x9fe8f0,tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/uranus.jpg'},
+  {name:'Neptune',size:11,dist:420,orbitSpeed:0.002,rotSpeed:0.03,color:0x3b6ef0,tex:'https://cdn.jsdelivr.net/gh/ajay2507/planet-textures/neptune.jpg'},
+];
+
+const planets = [];
+const orbitGroup = new THREE.Group();
+scene.add(orbitGroup);
+
+function makeOrbit(radius){
+  const curve = new THREE.EllipseCurve(0,0,radius,radius,0,Math.PI*2,false,0);
+  const points = curve.getPoints(128);
+  const geometry = new THREE.BufferGeometry().setFromPoints(points.map(p=>new THREE.Vector3(p.x,0,p.y)));
+  const line = new THREE.LineLoop(geometry, new THREE.LineBasicMaterial({color:0x666666,opacity:0.35,transparent:true}));
+  line.rotation.x=Math.PI/2;
+  return line;
+}
+
+// Tạo hành tinh
+planetDefs.forEach(def=>{
+  const pivot = new THREE.Object3D();
+  pivot.userData = {orbitSpeed:def.orbitSpeed};
+  scene.add(pivot);
+
+  const geo = new THREE.SphereGeometry(def.size,48,48);
+  const mat = new THREE.MeshStandardMaterial({color:def.color,roughness:0.7});
+  if(def.tex) loader.load(def.tex, t=>{ t.encoding=THREE.sRGBEncoding; mat.map=t; mat.needsUpdate=true; });
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(def.dist,0,0);
+  pivot.add(mesh);
+
+  const div = document.createElement('div');
+  div.className='label';
+  div.textContent=def.name;
+  const label=new CSS2DObject(div);
+  label.position.set(def.dist,def.size+8,0);
+  pivot.add(label);
+
+  if(def.ring){
+    const ringGeo=new THREE.RingGeometry(def.ring.inner,def.ring.outer,64);
+    const ringMat=new THREE.MeshBasicMaterial({side:THREE.DoubleSide,transparent:true,opacity:0.95});
+    if(def.ring.tex) loader.load(def.ring.tex, t=>{ringMat.map=t; ringMat.needsUpdate=true;});
+    const ringMesh=new THREE.Mesh(ringGeo,ringMat);
+    ringMesh.rotation.x=Math.PI/2.8;
+    ringMesh.position.set(def.dist,0,0);
+    pivot.add(ringMesh);
+  }
+
+  orbitGroup.add(makeOrbit(def.dist));
+  planets.push({def,pivot,mesh});
+});
+
+// Mặt trăng Trái Đất
+const moonGeo=new THREE.SphereGeometry(2.2,32,32);
+const moonMat=new THREE.MeshStandardMaterial({color:0xaaaaaa});
+const moon=new THREE.Mesh(moonGeo,moonMat);
+const earthObj=planets.find(p=>p.def.name==='Earth');
+if(earthObj){
+  const moonPivot=new THREE.Object3D();
+  moonPivot.position.copy(earthObj.mesh.position);
+  moon.position.set(14,0,0);
+  moonPivot.add(moon);
+  scene.add(moonPivot);
+  earthObj.moonPivot=moonPivot;
+}
+
+// Starfield
+function makeStarfield(count=2000,radius=1800){
+  const geom=new THREE.BufferGeometry();
+  const positions=new Float32Array(count*3);
+  for(let i=0;i<count;i++){
+    const r=radius*(0.6+Math.random()*0.4);
+    const theta=Math.random()*Math.PI*2;
+    const phi=Math.acos(2*Math.random()-1);
+    positions[i*3]=r*Math.sin(phi)*Math.cos(theta);
+    positions[i*3+1]=r*Math.sin(phi)*Math.sin(theta);
+    positions[i*3+2]=r*Math.cos(phi);
+  }
+  geom.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  const mat=new THREE.PointsMaterial({size:1.4,color:0xffffff,transparent:true,opacity:0.9});
+  scene.add(new THREE.Points(geom,mat));
+}
+makeStarfield();
+
+// Toggle quỹ đạo
+let showOrbits=true;
+window.addEventListener('keydown',e=>{
+  if(e.key.toLowerCase()==='h') showOrbits=!showOrbits, orbitGroup.visible=showOrbits;
+});
+
+// Animation loop
+let time=0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=0.016; time+=dt;
+
+  sun.rotation.y+=0.0012;
+  sun.material.emissiveIntensity=1+Math.sin(time*1.7)*0.05;
+
+  planets.forEach(p=>{
+    p.pivot.rotation.y+=p.def.orbitSpeed*0.6;
+    p.mesh.rotation.y+=p.def.rotSpeed;
+    if(p.def.name==='Earth' && earthObj && earthObj.moonPivot){
+      const worldPos=new THREE.Vector3();
+      p.mesh.getWorldPosition(worldPos);
+      earthObj.moonPivot.position.copy(worldPos);
+      earthObj.moonPivot.rotation.y+=0.04;
+    }
+  });
+
+  controls.update();
+  composer.render();
+  labelRenderer.render(scene,camera);
+}
+animate();
+
+// Responsive
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  composer.setSize(innerWidth,innerHeight);
+  labelRenderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
